@@ -1,0 +1,1602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Runtime Security in Kubernetes | Executive Briefing</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    :root {
+      --navy: #0A1628;
+      --navy2: #132240;
+      --navy3: #1C3158;
+      --accent: #C8A96E;
+      --accent2: #E8C87A;
+      --slate: #4A6080;
+      --steel: #6B85A0;
+      --light: #F4F6F8;
+      --white: #FFFFFF;
+      --red: #C0392B;
+      --green: #1A6B3C;
+      --amber: #B8860B;
+    }
+    
+    html, body {
+      height: 100%;
+      font-family: 'DM Sans', sans-serif;
+      background: var(--navy);
+      color: var(--text-primary);
+      overflow: hidden;
+    }
+    
+    /* Slide Container */
+    .deck {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+    }
+    
+    .slide {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.6s ease, visibility 0.6s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+    
+    .slide.active {
+      opacity: 1;
+      visibility: visible;
+    }
+    
+    .slide-inner {
+      width: 100%;
+      max-width: 1200px;
+      height: 100%;
+      max-height: 800px;
+      background: var(--white);
+      border-radius: 12px;
+      box-shadow: 0 25px 80px rgba(0,0,0,0.4);
+      padding: 3rem;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .slide::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 6px;
+      height: 100%;
+      background: var(--accent);
+    }
+    
+    /* Title Slide */
+    .title-slide .slide-inner {
+      background: linear-gradient(135deg, var(--navy) 0%, var(--navy2) 100%);
+      color: var(--white);
+      justify-content: center;
+    }
+    
+    .title-slide::before {
+      display: none;
+    }
+    
+    /* Animations */
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    
+    @keyframes scaleIn {
+      from {
+        opacity: 0;
+        transform: scale(0.9);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+    
+    @keyframes slideInLeft {
+      from {
+        opacity: 0;
+        transform: translateX(-50px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+    
+    @keyframes slideInRight {
+      from {
+        opacity: 0;
+        transform: translateX(50px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+    
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+    
+    @keyframes glow {
+      0%, 100% { box-shadow: 0 0 20px rgba(200,169,110,0.3); }
+      50% { box-shadow: 0 0 40px rgba(200,169,110,0.6); }
+    }
+    
+    @keyframes drawLine {
+      from { width: 0; }
+      to { width: 60px; }
+    }
+    
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+    
+    /* Active slide animations */
+    .slide.active .title-overline { animation: fadeInUp 0.6s ease 0.1s both; }
+    .slide.active .title-main { animation: fadeInUp 0.6s ease 0.2s both; }
+    .slide.active .title-divider { animation: drawLine 0.6s ease 0.4s both; }
+    .slide.active .title-meta { animation: fadeInUp 0.6s ease 0.5s both; }
+    
+    .slide.active .slide-tag { animation: fadeInUp 0.5s ease 0.1s both; }
+    .slide.active .slide-headline { animation: fadeInUp 0.5s ease 0.2s both; }
+    .slide.active .slide-content { animation: fadeInUp 0.5s ease 0.3s both; }
+    
+    /* Title Slide Elements */
+    .title-overline {
+      font-size: 12px;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 1.5rem;
+      font-weight: 500;
+    }
+    
+    .title-main {
+      font-family: 'Playfair Display', serif;
+      font-size: 3rem;
+      font-weight: 600;
+      color: var(--white);
+      line-height: 1.2;
+      margin-bottom: 2rem;
+      max-width: 800px;
+    }
+    
+    .title-divider {
+      height: 3px;
+      background: var(--accent);
+      margin-bottom: 2rem;
+      width: 0;
+    }
+    
+    .title-meta {
+      font-size: 14px;
+      color: rgba(255,255,255,0.6);
+      line-height: 2;
+    }
+    
+    .title-meta strong {
+      color: rgba(255,255,255,0.9);
+      font-weight: 500;
+    }
+    
+    /* Standard Slide Elements */
+    .slide-number {
+      position: absolute;
+      top: 1.5rem;
+      right: 2rem;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--steel);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    
+    .slide-tag {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 1rem;
+    }
+    
+    .slide-headline {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.6rem;
+      font-weight: 600;
+      color: var(--navy);
+      line-height: 1.4;
+      margin-bottom: 1.5rem;
+      border-bottom: 2px solid rgba(200,169,110,0.3);
+      padding-bottom: 1rem;
+    }
+    
+    .slide-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    
+    /* Two Column Layout */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2.5rem;
+      align-items: start;
+    }
+    
+    .three-col {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.5rem;
+    }
+    
+    /* Bullets */
+    .bullets {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    
+    .bullets li {
+      font-size: 14px;
+      color: var(--slate);
+      line-height: 1.7;
+      padding-left: 1.2rem;
+      position: relative;
+    }
+    
+    .bullets li::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0.6em;
+      width: 6px;
+      height: 6px;
+      background: var(--accent);
+      border-radius: 50%;
+    }
+    
+    .bullets li strong {
+      color: var(--navy);
+      font-weight: 600;
+    }
+    
+    /* Callout */
+    .callout {
+      background: var(--navy);
+      color: var(--white);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      font-size: 13px;
+      line-height: 1.7;
+      margin-top: 1rem;
+      border-left: 4px solid var(--accent);
+    }
+    
+    .callout em {
+      color: var(--accent2);
+      font-style: normal;
+      font-weight: 500;
+    }
+    
+    /* Metrics */
+    .metric-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+    
+    .metric {
+      background: var(--light);
+      border-radius: 8px;
+      padding: 1rem;
+      text-align: center;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    
+    .metric:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 25px rgba(10,22,40,0.1);
+    }
+    
+    .metric .val {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.8rem;
+      font-weight: 600;
+      color: var(--navy);
+    }
+    
+    .metric .lbl {
+      font-size: 11px;
+      color: var(--steel);
+      margin-top: 4px;
+      line-height: 1.4;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    /* Layers */
+    .layer-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    
+    .layer {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      transition: transform 0.3s ease;
+    }
+    
+    .layer:hover {
+      transform: translateX(5px);
+    }
+    
+    .layer-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    
+    .layer-label { color: var(--navy); font-weight: 600; }
+    .layer-sub { font-size: 12px; color: var(--steel); margin-top: 2px; }
+    
+    .layer-badge {
+      margin-left: auto;
+      font-size: 10px;
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+    
+    /* Architecture Boxes */
+    .arch-container {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    
+    .arch-row {
+      display: grid;
+      gap: 8px;
+    }
+    
+    .arch-box {
+      background: var(--light);
+      border: 1px solid rgba(10,22,40,0.1);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--navy);
+      text-align: center;
+      transition: all 0.3s ease;
+    }
+    
+    .arch-box:hover {
+      transform: scale(1.02);
+      box-shadow: 0 4px 15px rgba(10,22,40,0.1);
+    }
+    
+    .arch-box.dark {
+      background: var(--navy);
+      color: var(--white);
+    }
+    
+    .arch-box.accent {
+      background: var(--accent);
+      color: var(--navy);
+    }
+    
+    .arch-arrow {
+      text-align: center;
+      color: var(--steel);
+      font-size: 18px;
+      line-height: 1;
+      margin: 4px 0;
+      animation: float 2s ease infinite;
+    }
+    
+    /* Threat Grid */
+    .threat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+    }
+    
+    .threat-item {
+      background: rgba(192,57,43,0.08);
+      border-left: 4px solid var(--red);
+      padding: 0.75rem 1rem;
+      border-radius: 0 8px 8px 0;
+      transition: all 0.3s ease;
+    }
+    
+    .threat-item:hover {
+      transform: translateX(5px);
+      box-shadow: 0 4px 15px rgba(192,57,43,0.15);
+    }
+    
+    .threat-item .th {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--navy);
+    }
+    
+    .threat-item .td {
+      font-size: 12px;
+      color: var(--steel);
+      margin-top: 4px;
+    }
+    
+    /* Option Cards */
+    .option-card {
+      border: 1px solid rgba(10,22,40,0.12);
+      border-radius: 12px;
+      padding: 1.25rem;
+      transition: all 0.3s ease;
+      position: relative;
+    }
+    
+    .option-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 15px 40px rgba(10,22,40,0.15);
+    }
+    
+    .option-card.recommended {
+      border: 3px solid var(--accent);
+      animation: glow 3s ease infinite;
+    }
+    
+    .rec-badge {
+      position: absolute;
+      top: -12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--accent);
+      color: var(--navy);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 4px 14px;
+      border-radius: 4px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    
+    .oc-head {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--navy);
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 2px solid rgba(200,169,110,0.3);
+    }
+    
+    /* Tradeoff Bars */
+    .tradeoff-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid rgba(10,22,40,0.08);
+    }
+    
+    .tradeoff-row:last-child { border-bottom: none; }
+    
+    .tradeoff-label {
+      flex: 1;
+      color: var(--navy);
+      font-weight: 500;
+      font-size: 12px;
+    }
+    
+    .tradeoff-bar-wrap {
+      flex: 2;
+      background: var(--light);
+      border-radius: 4px;
+      height: 8px;
+      overflow: hidden;
+    }
+    
+    .tradeoff-bar {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 1s ease;
+    }
+    
+    /* Roadmap Timeline */
+    .roadmap-timeline {
+      display: flex;
+      gap: 0;
+      margin-top: 1rem;
+    }
+    
+    .phase {
+      flex: 1;
+      position: relative;
+      transition: transform 0.3s ease;
+    }
+    
+    .phase:hover {
+      transform: translateY(-5px);
+    }
+    
+    .phase-header {
+      padding: 0.75rem 1rem;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--white);
+      letter-spacing: 0.5px;
+      border-radius: 8px 8px 0 0;
+    }
+    
+    .phase-body {
+      padding: 1rem;
+      background: var(--light);
+      font-size: 12px;
+      color: var(--steel);
+      line-height: 1.6;
+      min-height: 120px;
+      border-radius: 0 0 8px 8px;
+    }
+    
+    .phase-label {
+      font-size: 11px;
+      color: rgba(255,255,255,0.7);
+      margin-top: 4px;
+      font-weight: 400;
+    }
+    
+    /* Risk Table */
+    .risk-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin-top: 1rem;
+    }
+    
+    .risk-table th {
+      text-align: left;
+      padding: 0.75rem 1rem;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--steel);
+      border-bottom: 2px solid rgba(10,22,40,0.15);
+    }
+    
+    .risk-table td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid rgba(10,22,40,0.08);
+      color: var(--slate);
+    }
+    
+    .risk-table tr {
+      transition: background 0.3s ease;
+    }
+    
+    .risk-table tr:hover {
+      background: rgba(200,169,110,0.05);
+    }
+    
+    .risk-table td:first-child {
+      color: var(--navy);
+      font-weight: 600;
+    }
+    
+    .sev {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+    
+    .sev.high { background: rgba(192,57,43,0.15); color: var(--red); }
+    .sev.med { background: rgba(184,134,11,0.15); color: var(--amber); }
+    .sev.low { background: rgba(26,107,60,0.15); color: var(--green); }
+    
+    /* Agenda */
+    .agenda-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    
+    .agenda-item {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 1rem 1.25rem;
+      background: var(--light);
+      border-radius: 10px;
+      transition: all 0.3s ease;
+    }
+    
+    .agenda-item:hover {
+      transform: translateX(8px);
+      background: var(--navy);
+    }
+    
+    .agenda-item:hover .agenda-text {
+      color: var(--white);
+    }
+    
+    .agenda-num {
+      width: 32px;
+      height: 32px;
+      background: var(--navy);
+      color: var(--white);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      flex-shrink: 0;
+      transition: all 0.3s ease;
+    }
+    
+    .agenda-item:hover .agenda-num {
+      background: var(--accent);
+      color: var(--navy);
+    }
+    
+    .agenda-text {
+      font-size: 14px;
+      color: var(--navy);
+      font-weight: 500;
+      transition: color 0.3s ease;
+    }
+    
+    /* Conclusion Cards */
+    .conclusion-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.5rem;
+      margin-top: 1rem;
+    }
+    
+    .conc-card {
+      background: var(--navy);
+      border-radius: 12px;
+      padding: 1.5rem;
+      text-align: center;
+      transition: all 0.3s ease;
+      border: 2px solid transparent;
+    }
+    
+    .conc-card:hover {
+      transform: translateY(-8px);
+      border-color: var(--accent);
+      box-shadow: 0 20px 50px rgba(10,22,40,0.3);
+    }
+    
+    .conc-card .cc-icon {
+      font-size: 2rem;
+      margin-bottom: 1rem;
+      color: var(--accent);
+    }
+    
+    .conc-card .cc-head {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--accent2);
+      margin-bottom: 0.75rem;
+    }
+    
+    .conc-card .cc-body {
+      font-size: 12px;
+      color: rgba(255,255,255,0.7);
+      line-height: 1.7;
+    }
+    
+    /* Signal Tags */
+    .signal-row {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-top: 0.75rem;
+    }
+    
+    .signal-tag {
+      background: var(--navy3);
+      color: rgba(255,255,255,0.9);
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      transition: all 0.3s ease;
+    }
+    
+    .signal-tag:hover {
+      background: var(--accent);
+      color: var(--navy);
+      transform: scale(1.05);
+    }
+    
+    /* Response Matrix */
+    .response-matrix {
+      display: grid;
+      grid-template-columns: auto 1fr 1fr;
+      gap: 0;
+      border: 1px solid rgba(10,22,40,0.15);
+      border-radius: 8px;
+      overflow: hidden;
+      margin-top: 1rem;
+      font-size: 13px;
+    }
+    
+    .rm-header {
+      background: var(--navy);
+      color: var(--white);
+      padding: 0.6rem 1rem;
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .rm-cell {
+      padding: 0.75rem 1rem;
+      border-top: 1px solid rgba(10,22,40,0.1);
+    }
+    
+    .rm-cell:nth-child(odd) {
+      background: rgba(10,22,40,0.03);
+    }
+    
+    /* Scenario Flow */
+    .scenario-flow {
+      display: flex;
+      align-items: stretch;
+      gap: 0;
+      margin-top: 1rem;
+    }
+    
+    .sf-step {
+      flex: 1;
+      background: var(--light);
+      padding: 1rem;
+      position: relative;
+      font-size: 12px;
+      transition: all 0.3s ease;
+    }
+    
+    .sf-step:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 30px rgba(10,22,40,0.15);
+    }
+    
+    .sf-step:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      right: -12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 0;
+      height: 0;
+      border-top: 8px solid transparent;
+      border-bottom: 8px solid transparent;
+      border-left: 12px solid var(--light);
+      z-index: 1;
+    }
+    
+    .sf-step .sf-head {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--steel);
+      margin-bottom: 6px;
+    }
+    
+    .sf-step .sf-body {
+      color: var(--navy);
+      font-weight: 600;
+      font-size: 13px;
+    }
+    
+    .sf-step .sf-sub {
+      color: var(--steel);
+      font-size: 11px;
+      margin-top: 4px;
+    }
+    
+    /* Navigation */
+    .nav-controls {
+      position: fixed;
+      bottom: 2rem;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      z-index: 1000;
+    }
+    
+    .nav-btn {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: var(--white);
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      color: var(--navy);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+      transition: all 0.3s ease;
+    }
+    
+    .nav-btn:hover {
+      background: var(--accent);
+      transform: scale(1.1);
+    }
+    
+    .nav-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+    
+    .progress-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 4px;
+      background: var(--accent);
+      transition: width 0.4s ease;
+      z-index: 1001;
+    }
+    
+    .slide-counter {
+      position: fixed;
+      top: 2rem;
+      right: 2rem;
+      background: rgba(255,255,255,0.95);
+      padding: 0.5rem 1rem;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--navy);
+      z-index: 1000;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    
+    .keyboard-hint {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      font-size: 12px;
+      color: rgba(255,255,255,0.5);
+      z-index: 1000;
+    }
+    
+    /* Quote Box */
+    .quote-box {
+      background: var(--light);
+      border-left: 4px solid var(--accent);
+      padding: 1.25rem 1.5rem;
+      border-radius: 0 8px 8px 0;
+      margin-top: 1rem;
+    }
+    
+    .quote-box .quote-text {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.1rem;
+      color: var(--navy);
+      line-height: 1.6;
+    }
+    
+    /* Responsive */
+    @media (max-width: 1024px) {
+      .slide-inner { padding: 2rem; }
+      .title-main { font-size: 2rem; }
+      .slide-headline { font-size: 1.3rem; }
+      .two-col { grid-template-columns: 1fr; gap: 1.5rem; }
+      .three-col { grid-template-columns: 1fr; }
+      .conclusion-grid { grid-template-columns: 1fr; }
+      .roadmap-timeline { flex-direction: column; }
+      .scenario-flow { flex-direction: column; }
+      .sf-step:not(:last-child)::after { display: none; }
+      .metric-row { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <div class="progress-bar" id="progressBar"></div>
+  <div class="slide-counter" id="slideCounter">1 / 13</div>
+  
+  <div class="deck">
+    
+    <!-- Slide 1: Title -->
+    <div class="slide title-slide active">
+      <div class="slide-inner">
+        <div class="title-overline">McKinsey-Style Executive Briefing</div>
+        <div class="title-main">Designing and Operationalizing Runtime Security in Kubernetes & Cloud-Native Systems</div>
+        <div class="title-divider"></div>
+        <div class="title-meta">
+          <strong>Lead DevOps / SRE / Cloud Security</strong><br>
+          Senior Advisory Engagement · April 2026<br>
+          Runtime Security Architecture · Detection & Response
+        </div>
+      </div>
+    </div>
+    
+    <!-- Slide 2: Agenda -->
+    <div class="slide">
+      <div class="slide-inner">
+        <div class="slide-number">02 / 13</div>
+        <div class="slide-tag">Agenda</div>
+        <div class="slide-headline">This briefing covers the full arc — from problem framing to client-ready implementation</div>
+        <div class="slide-content">
+          <div class="agenda-grid">
+            <div class="agenda-item"><div class="agenda-num">1</div><div class="agenda-text">The security gap traditional controls leave open</div></div>
+            <div class="agenda-item"><div class="agenda-num">2</div><div class="agenda-text">Kubernetes-specific threat landscape</div></div>
+            <div class="agenda-item"><div class="agenda-num">3</div><div class="agenda-text">Runtime security architecture & signal model</div></div>
+            <div class="agenda-item"><div class="agenda-num">4</div><div class="agenda-text">Detection & response strategy</div></div>
+            <div class="agenda-item"><div class="agenda-num">5</div><div class="agenda-text">Real-world scenario walkthrough</div></div>
+            <div class="agenda-item"><div class="agenda-num">6</div><div class="agenda-text">Strategic options & trade-offs</div></div>
+            <div class="agenda-item"><div class="agenda-num">7</div><div class="agenda-text">Implementation roadmap</div></div>
+            <div class="agenda-item"><div class="agenda-num">8</div><div class="agenda-text">Risks, mitigations & conclusion</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Slide 3: Problem Statement -->
+    <div class="slide">
+      <div class="slide-inner">
+        <div class="slide-number">03 / 13</div>
+        <div class="slide-tag">Problem Statement</div>
+        <div class="slide-headline">Conventional security stops at deployment — leaving a critical visibility blindspot in production</div>
+        <div class="slide-content">
+          <div class="two-col">
+            <div>
+              <div class="layer-stack">
+                <div class="layer" style="background:rgba(26,107,60,0.1)">
+                  <div class="layer-icon" style="background:var(--green);color:var(--white)">CI</div>
+                  <div><div class="layer-label">CI/CD Pipeline</div><div class="layer-sub">SAST, image scans, IaC validation</div></div>
+                  <div class="layer-badge" style="background:rgba(26,107,60,0.2);color:var(--green)">COVERED</div>
+                </div>
+                <div class="layer" style="background:rgba(26,107,60,0.1)">
+                  <div class="layer-icon" style="background:var(--green);color:var(--white)">BLD</div>
+                  <div><div class="layer-label">Build Artifacts</div><div class="layer-sub">Container image hardening, signing</div></div>
+                  <div class="layer-badge" style="background:rgba(26,107,60,0.2);color:var(--green)">COVERED</div>
+                </div>
+                <div class="layer" style="background:rgba(192,57,43,0.15);border-left:4px solid var(--red)">
+                  <div class="layer-icon" style="background:var(--red);color:var(--white)">RT</div>
+                  <div><div class="layer-label" style="color:var(--red);font-weight:700">Production Runtime</div><div class="layer-sub">Live workload behavior — after deployment</div></div>
+                  <div class="layer-badge" style="background:rgba(192,57,43,0.2);color:var(--red)">BLIND SPOT</div>
+                </div>
+              </div>
+            </div>
+            <div>
+              <ul class="bullets">
+                <li><strong>~70% of cloud breaches</strong> originate from runtime misuse of valid credentials or misconfigurations — not build-time defects</li>
+                <li>A <strong>clean container image can still execute malicious commands</strong> post-deployment via zero-days or injected payloads</li>
+                <li>Static controls provide <strong>zero visibility into process execution, network flows, or identity abuse</strong> inside running pods</li>
+                <li>Mean time to detect (MTTD) in cloud environments without runtime telemetry: <strong>197 days</strong> (IBM Cost of Breach 2024)</li>
+              </ul>
+              <div class="callout">"Traditional security assumes threats are known at build time. <em>Production environments never cooperate with that assumption.</em>"</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Slide 4: Threat Landscape -->
+    <div class="slide">
+      <div class="slide-inner">
+        <div class="slide-number">04 / 13</div>
+        <div class="slide-tag">Context Analysis</div>
+        <div class="slide-headline">Kubernetes' API-driven architecture amplifies attacker velocity once initial access is gained</div>
+        <div class="slide-content">
+          <div class="two-col">
+            <div>
+              <div class="threat-grid">
+                <div class="threat-item"><div class="th">API Server Access</div><div class="td">Single control plane; compromise = full cluster visibility</div></div>
+                <div class="threat-item"><div class="th">Service Account Misuse</div><div class="td">Overprivileged SAs enable lateral movement via kubectl</div></div>
+                <div class="threat-item"><div class="th">Privileged Containers</div><div class="td">Direct host access; bypasses namespace isolation</div></div>
+                <div class="threat-item"><div class="th">Secrets Exposure</div><div class="td">etcd plaintext, env-var injection, mounted secrets</div></div>
+                <div class="threat-item"><div class="th">Pod-to-Pod Movement</div><div class="td">Flat east-west traffic without NetworkPolicy</div></div>
+                <div class="threat-item"><div class="th">Supply Chain Risk</div><div class="td">Third-party image layers with unknown vulnerabilities</div></div>
+              </div>
+            </div>
+            <div>
+              <ul class="bullets">
+                <li><strong>Kubernetes RBAC misconfiguration</strong> is the #1 escalation vector in cloud-native breaches (CNCF 2024 survey)</li>
+                <li>Default service accounts with <strong>wildcard permissions</strong> remain in ~45% of production clusters</li>
+                <li>Once inside, attackers can enumerate pods, secrets, and services <strong>in under 2 minutes</strong> using standard kubectl</li>
+                <li>NetworkPolicy adoption: <strong>less than 40%</strong> of enterprise clusters enforce egress filtering</li>
+              </ul>
+              <div class="callout">"Kubernetes is API-driven. <em>Once access is gained, lateral movement is fast and largely invisible without runtime telemetry.</em>"</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Slide 5: Key Insight -->
+    <div class="slide">
+      <div class="slide-inner">
+        <div class="slide-number">05 / 13</div>
+        <div class="slide-tag">Key Insight</div>
+        <div class="slide-headline">Runtime security is the only layer that observes actual behavior — not theoretical risk</div>
+        <div class="slide-content">
+          <div class="two-col">
+            <div>
+              <div class="layer-stack">
+                <div class="layer" style="background:rgba(10,22,40,0.06)">
+                  <div class="layer-icon" style="background:var(--light);border:2px solid rgba(10,22,40,0.2);color:var(--slate);font-size:10px">CODE</div>
+                  <div><div class="layer-label">Code Layer</div><div class="layer-sub">SAST, SCA, peer review</div></div>
+                  <div class="layer-badge" style="background:rgba(10,22,40,0.1);color:var(--slate)">PREVENTION</div>
+                </div>
+                <div class="layer" style="background:rgba(10,22,40,0.06)">
+                  <div class="layer-icon" style="background:var(--light);border:2px solid rgba(10,22,40,0.2);color:var(--slate);font-size:10px">IMG</div>
+                  <div><div class="layer-label">Build Layer</div><div class="layer-sub">Image scanning, signing, hardening</div></div>
+                  <div class="layer-badge" style="background:rgba(10,22,40,0.1);color:var(--slate)">PREVENTION</div>
+                </div>
+                <div class="layer" style="background:rgba(10,22,40,0.06)">
+                  <div class="layer-icon" style="background:var(--light);border:2px solid rgba(10,22,40,0.2);color:var(--slate);font-size:10px">IaC</div>
+                  <div><div class="layer-label">Deploy Layer</div><div class="layer-sub">IaC validation, admission control</div></div>
+                  <div class="layer-badge" style="background:rgba(10,22,40,0.1);color:var(--slate)">PREVENTION</div>
+                </div>
+                <div class="layer" style="background:var(--navy);border-radius:8px;animation:glow 3s ease infinite">
+                  <div class="layer-icon" style="background:var(--accent);color:var(--navy);font-size:10px;font-weight:800">RT</div>
+                  <div><div class="layer-label" style="color:var(--white);font-weight:700">Runtime Layer</div><div class="layer-sub" style="color:rgba(255,255,255,0.7)">Live behavior monitoring & response</div></div>
+                  <div class="layer-badge" style="background:var(--accent);color:var(--navy)">DETECTION</div>
+                </div>
+              </div>
+            </div>
+            <div>
+              <ul class="bullets">
+                <li><strong>Runtime is the ground truth layer</strong> — it sees actual syscalls, network connections, and identity usage, not projections</li>
+                <li>Prevention layers fail silently against <strong>zero-days, misconfigured permissions, and credential theft</strong></li>
+                <li>Only runtime telemetry enables <strong>post-deployment anomaly detection</strong> and meaningful MTTD reduction</li>
+                <li>DORA metrics show teams with runtime security close critical incidents <strong>3.2× faster</strong> than those relying solely on preventive controls</li>
+              </ul>
+              <div class="callout">"Prevention reduces attack surface. <em>Runtime security reduces blast radius</em> — and blast radius is what determines actual business impact."</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Slide 6: Architecture -->
+    <div class="slide">
+      <div class="slide-inner">
+        <div class="slide-number">06 / 13</div>
+        <div class="slide-tag">Architecture</div>
+        <div class="slide-headline">A four-layer runtime architecture — signal collection through automated response — provides end-to-end observability</div>
+        <div class="slide-content">
+          <div class="two-col">
+            <div class="arch-container">
+              <div class="arch-row" style="grid-template-columns:1fr 1fr">
+                <div class="arch-box" style="background:rgba(10,22,40,0.05)">CI/CD Pipeline<div style="font-size:11px;color:var(--steel);font-weight:400;margin-top:2px">Build-time controls</div></div>
+                <div class="arch-box" style="background:rgba(10,22,40,0.05)">Kubernetes Cluster<div style="font-size:11px;color:var(--steel);font-weight:400;margin-top:2px">Pods · Services · APIs</div></div>
+              </div>
+              <div class="arch-arrow">↓</div>
+              <div class="arch-row" style="grid-template-columns:1fr 1fr 1fr">
+                <div class="arch-box" style="border-top:3px solid var(--navy3)">Process<br>Syscalls</div>
+                <div class="arch-box" style="border-top:3px solid var(--navy3)">Network<br>Events</div>
+                <div class="arch-box" style="border-top:3px solid var(--navy3)">K8s Audit<br>Logs</div>
+              </div>
+              <div class="arch-arrow">↓</div>
+              <div class="arch-box dark" style="font-weight:600;font-size:13px;padding:0.8rem">Runtime Security Engine<div style="font-size:11px;font-weight:400;color:rgba(255,255,255,0.7);margin-top:4px">Falco · Cortex · Sysdig · Custom policies</div></div>
+              <div class="arch-arrow">↓</div>
+              <div class="arch-box" style="border-top:3px solid var(--accent);font-size:12px">SIEM / Observability Platform<div style="font-size:11px;color:var(--steel);margin-top:2px">Splunk · Datadog · Elastic</div></div>
+              <div class="arch-arrow">↓</div>
+              <div class="arch-box accent" style="font-size:12px;font-weight:600">Response Actions<div style="font-size:11px;font-weight:400;margin-top:2px">Isolate · Kill · Rotate · Alert</div></div>
+            </div>
+            <div>
+              <ul class="bullets">
+                <li>Signal collection runs at the <strong>kernel syscall level</strong> via eBPF agents — minimal footprint, maximum fidelity</li>
+                <li>Policy engine evaluates events against <strong>defined behavioral baselines</strong> — not just signatures</li>
+                <li>SIEM integration provides <strong>cross-workload correlation</strong> and audit trails for compliance</li>
+                <li>Response actions are <strong>severity-gated</strong> to prevent automation from breaking production</li>
+              </ul>
+              <div class="callout">"This architecture doesn't replace CI/CD — it <em>extends visibility past the boundary where all other controls go blind</em>."</div>
+              <div class="metric-row" style="grid-template-columns:1fr 1fr;margin-top:1rem">
+                <div class="metric"><div class="val">&lt;2%</div><div class="lbl">eBPF CPU overhead</div></div>
+                <div class="metric"><div class="val">~3s</div><div class="lbl">Detection latency target</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Slide 7: Detection Strategy -->
+    <div class="slide">
+      <div class="slide-inner">
+        <div class="slide-number">07 / 13</div>
+        <div class="slide-tag">Detection Strategy</div>
+        <div class="slide-headline">High-signal detection over high-volume alerting — the quality of the signal determines the quality of the response</div>
+        <div class="slide-content">
+          <div class="two-col">
+            <div>
+              <div style="margin-bottom:1.5rem">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--steel);margin-bottom:0.75rem">Priority Signals (High Confidence)</div>
+                <div class="signal-row">
+                  <div class="signal-tag">Shell in container</div>
+                  <div class="signal-tag">Privileged exec</div>
+                  <div class="signal-tag">Unexpected outbound traffic</div>
+                  <div class="signal-tag">Crypto-mining pattern</div>
+                  <div class="signal-tag">kubectl inside pod</div>
+                  <div class="signal-tag">Sensitive file read</div>
+                </div>
+              </div>
+              <div>
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--steel);margin-bottom:0.75rem">Baseline Methodology</div>
+                <div class="arch-container">
+                  <div class="arch-box" style="text-align:left;font-size:12px;padding:0.6rem 1rem">1. Observe 14-day behavioral baseline per workload</div>
+                  <div class="arch-box" style="text-align:left;font-size:12px;padding:0.6rem 1rem">2. Define allow-list of expected process tree & network peers</div>
+                  <div class="arch-box" style="text-align:left;font-size:12px;padding:0.6rem 1rem">3. Flag deviations with anomaly confidence scoring</div>
+                  <div class="arch-box" style="text-align:left;font-size:12px;padding:0.6rem 1rem">4. Iterative tuning — suppress low-value, escalate high-risk</div>
+                </div>
+              </div>
+            </div>
+            <div>
+              <ul class="bullets">
+                <li>Focus on <strong>behavioral deviation, not just known-bad signatures</strong> — unknown threats follow known patterns</li>
+                <li>Treat <strong>false positive rate as a first-class KPI</strong>; excess noise erodes analyst trust within 2 weeks</li>
+                <li>Kubernetes audit logs reveal <strong>control plane abuse</strong> (secret enumeration, RBAC escalation) that agent-only tools miss</li>
+                <li>IAM/service account usage should be <strong>baselining concurrently</strong> with process telemetry</li>
+              </ul>
+              <div class="callout">"Detection quality is inversely proportional to alert volume. <em>The goal is fewer, higher-confidence signals — not a dashboard that's always red.</em>"</div>
+              <div class="metric-row" style="grid-template-columns:1fr 1fr;margin-top:1rem">
+                <div class="metric"><div class="val">&lt;5%</div><div class="lbl">Target false positive rate</div></div>
+                <div class="metric"><div class="val">14d</div><div class="lbl">Baseline window</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Slide 8: Response Strategy -->
+    <div class="slide">
+      <div class="slide-inner">
+        <div class="slide-number">08 / 13</div>
+        <div class="slide-tag">Response Strategy</div>
+        <div class="slide-headline">Risk-calibrated response prevents automation from becoming the incident — over-response breaks production</div>
+        <div class="slide-content">
+          <div class="two-col">
+            <div>
+              <div class="response-matrix">
+                <div class="rm-header">Confidence</div><div class="rm-header">Response</div><div class="rm-header">Automation</div>
+                <div class="rm-cell" style="color:var(--green);font-weight:600">Low</div><div class="rm-cell">Alert only → analyst review</div><div class="rm-cell">None</div>
+                <div class="rm-cell" style="color:var(--amber);font-weight:600">Medium</div><div class="rm-cell">Isolate pod (network policy)</div><div class="rm-cell">Semi-auto</div>
+                <div class="rm-cell" style="color:var(--red);font-weight:600">High</div><div class="rm-cell">Kill container + credential rotation</div><div class="rm-cell">Automated</div>
+                <div class="rm-cell" style="color:var(--red);font-weight:600">Critical</div><div class="rm-cell">Drain node + forensic snapshot</div><div class="rm-cell">Automated + PagerDuty</div>
+              </div>
+              <div class="callout" style="margin-top:1rem">"Response actions must be <em>calibrated to confidence, not paranoia</em>. A prematurely killed production pod can cost more than a contained threat."</div>
+            </div>
+            <div>
+              <ul class="bullets">
+                <li><strong>Isolate before kill</strong> — network isolation preserves forensic evidence while limiting blast radius</li>
+                <li><strong>Credential rotation</strong> must be triggered automatically when service account abuse is confirmed — manual rotation is too slow</li>
+                <li>Maintain a <strong>runbook per threat scenario</strong> with explicit escalation criteria to prevent ad hoc decision fatigue</li>
+                <li>Post-incident review within <strong>48 hours</strong> of every automated response to prevent false-positive tuning debt</li>
+              </ul>
+              <div class="metric-row" style="grid-template-columns:1fr 1fr;margin-top:1rem">
+                <div class="metric"><div class="val">&lt;15m</div><div class="lbl">Target MTTD (runtime)</div></div>
+                <div class="metric"><div class="val">&lt;30m</div><div class="lbl">Target MTTR (containment)</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Slide 9: Scenario Walkthrough -->
+    <div class="slide">
+      <div class="slide-inner">
+        <div class="slide-number">09 / 13</div>
+        <div class="slide-tag">Scenario Walkthrough</div>
+        <div class="slide-headline">A real-world suspicious process execution — how detection, isolation, and remediation played out</div>
+        <div class="slide-content">
+          <div class="scenario-flow">
+            <div class="sf-step" style="border-top:4px solid var(--red)">
+              <div class="sf-head">Trigger</div>
+              <div class="sf-body">Unexpected shell spawned inside payment-service container</div>
+              <div class="sf-sub">bash not in workload process tree</div>
+            </div>
+            <div class="sf-step" style="border-top:4px solid var(--amber)">
+              <div class="sf-head">Investigate</div>
+              <div class="sf-body">K8s audit: service account queried secrets API</div>
+              <div class="sf-sub">Falco rule: container_shell_in_production</div>
+            </div>
+            <div class="sf-step" style="border-top:4px solid var(--amber)">
+              <div class="sf-head">Isolate</div>
+              <div class="sf-body">NetworkPolicy applied — pod egress blocked</div>
+              <div class="sf-sub">No kill; preserve forensic state</div>
+            </div>
+            <div class="sf-step" style="border-top:4px solid var(--navy)">
+              <div class="sf-head">Remediate</div>
+              <div class="sf-body">Credential rotation triggered; pod drained</div>
+              <div class="sf-sub">Root cause: unpatched Log4j in base image</div>
+            </div>
+            <div class="sf-step" style="border-top:4px solid var(--green)">
+              <div class="sf-head">Harden</div>
+              <div class="sf-body">Image rebuilt; admission policy blocks vulnerable layers</div>
+              <div class="sf-sub">Runbook updated; MTTD: 8 minutes</div>
+            </div>
+          </div>
+          <div style="margin-top:1.5rem">
+            <ul class="bullets" style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem">
+              <li><strong>Key decision</strong>: isolate rather than kill immediately — preserved attack path evidence used to identify 3 other affected workloads</li>
+              <li>Credential rotation completed in <strong>4 minutes</strong> via automated pipeline integration</li>
+              <li><strong>Service disruption: zero</strong> — isolation maintained availability while blocking attacker egress</li>
+              <li>Root cause (Log4j in base image) would not have been caught by <strong>any static scan</strong> in the existing pipeline</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Slide 10: Strategic Options -->
+    <div class="slide">
+      <div class="slide-inner">
+        <div class="slide-number">10 / 13</div>
+        <div class="slide-tag">Strategic Options</div>
+        <div class="slide-headline">Three viable implementation approaches — each with distinct risk, cost, and maturity trade-offs</div>
+        <div class="slide-content">
+          <div class="three-col">
+            <div class="option-card">
+              <div class="oc-head">Option A: Open-Source Stack</div>
+              <ul class="bullets">
+                <li><strong>Falco</strong> + eBPF + Prometheus + Grafana</li>
+                <li>Low licensing cost; high operational burden</li>
+                <li>Requires dedicated SRE capacity to tune</li>
+                <li>Best for: mature engineering orgs</li>
+              </ul>
+              <div style="margin-top:1rem">
+                <div class="tradeoff-row"><div class="tradeoff-label">Cost</div><div class="tradeoff-bar-wrap"><div class="tradeoff-bar" style="width:25%;background:var(--green)"></div></div></div>
+                <div class="tradeoff-row"><div class="tradeoff-label">Effort</div><div class="tradeoff-bar-wrap"><div class="tradeoff-bar" style="width:85%;background:var(--red)"></div></div></div>
+                <div class="tradeoff-row"><div class="tradeoff-label">Coverage</div><div class="tradeoff-bar-wrap"><div class="tradeoff-bar" style="width:70%;background:var(--amber)"></div></div></div>
+              </div>
+            </div>
+            <div class="option-card recommended">
+              <div class="rec-badge">RECOMMENDED</div>
+              <div class="oc-head">Option B: Commercial Runtime Platform</div>
+              <ul class="bullets">
+                <li><strong>Sysdig / Cortex / Prisma Cloud</strong> with managed rules</li>
+                <li>Accelerated time-to-value (weeks, not months)</li>
+                <li>Built-in compliance frameworks (SOC2, CIS)</li>
+                <li>Best for: regulated industries, lean SecOps teams</li>
+              </ul>
+              <div style="margin-top:1rem">
+                <div class="tradeoff-row"><div class="tradeoff-label">Cost</div><div class="tradeoff-bar-wrap"><div class="tradeoff-bar" style="width:65%;background:var(--amber)"></div></div></div>
+                <div class="tradeoff-row"><div class="tradeoff-label">Effort</div><div class="tradeoff-bar-wrap"><div class="tradeoff-bar" style="width:35%;background:var(--green)"></div></div></div>
+                <div class="tradeoff-row"><div class="tradeoff-label">Coverage</div><div class="tradeoff-bar-wrap"><div class="tradeoff-bar" style="width:90%;background:var(--green)"></div></div></div>
+              </div>
+            </div>
+            <div class="option-card">
+              <div class="oc-head">Option C: Cloud-Native (CSP)</div>
+              <ul class="bullets">
+                <li><strong>AWS GuardDuty EKS / GKE Security / Azure Defender</strong></li>
+                <li>Deepest cloud IAM integration</li>
+                <li>Limited cross-cloud portability</li>
+                <li>Best for: single-cloud, early-stage programs</li>
+              </ul>
+              <div style="margin-top:1rem">
+                <div class="tradeoff-row"><div class="tradeoff-label">Cost</div><div class="tradeoff-bar-wrap"><div class="tradeoff-bar" style="width:45%;background:var(--amber)"></div></div></div>
+                <div class="tradeoff-row"><div class="trade-label">Effort</div><div class="tradeoff-bar-wrap"><div class="tradeoff-bar" style="width:30%;background:var(--green)"></div></div></div>
+                <div class="tradeoff-row"><div class="tradeoff-label">Coverage</div><div class="tradeoff-bar-wrap"><div class="tradeoff-bar" style="width:55%;background:var(--amber)"></div></div></div>
+              </div>
+            </div>
+          </div>
+          <div class="callout" style="margin-top:1rem">"The right option depends on team maturity, budget, and regulatory context — <em>not on which tool has the most impressive demo</em>."</div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Slide 11: Implementation Roadmap -->
+    <div class="slide">
+      <div class="slide-inner">
+        <div class="slide-number">11 / 13</div>
+        <div class="slide-tag">Implementation Roadmap</div>
+        <div class="slide-headline">Runtime security maturity is built in five deliberate phases — enforcement without visibility is dangerous</div>
+        <div class="slide-content">
+          <div class="roadmap-timeline">
+            <div class="phase">
+              <div class="phase-header" style="background:var(--navy3)">Phase 1<div class="phase-label">Weeks 1–3</div></div>
+              <div class="phase-body">
+                <strong style="font-size:12px;color:var(--navy)">Assess & Baseline</strong><br>
+                Workload inventory, risk classification, visibility gap analysis, tool selection
+              </div>
+            </div>
+            <div class="phase">
+              <div class="phase-header" style="background:var(--slate)">Phase 2<div class="phase-label">Weeks 4–6</div></div>
+              <div class="phase-body">
+                <strong style="font-size:12px;color:var(--navy)">Deploy (Monitor Only)</strong><br>
+                Agent rollout, K8s audit integration, SIEM pipeline — observe without enforcing
+              </div>
+            </div>
+            <div class="phase">
+              <div class="phase-header" style="background:var(--steel)">Phase 3<div class="phase-label">Weeks 7–10</div></div>
+              <div class="phase-body">
+                <strong style="font-size:12px;color:var(--navy)">Tune & Alert</strong><br>
+                Baseline analysis, policy refinement, runbook creation, team training
+              </div>
+            </div>
+            <div class="phase">
+              <div class="phase-header" style="background:var(--accent);color:var(--navy)">Phase 4<div class="phase-label" style="color:var(--navy)">Weeks 11–14</div></div>
+              <div class="phase-body">
+                <strong style="font-size:12px;color:var(--navy)">Graduated Enforcement</strong><br>
+                High-confidence rules enforced; automated isolation for critical events
+              </div>
+            </div>
+            <div class="phase">
+              <div class="phase-header" style="background:var(--navy)">Phase 5<div class="phase-label">Ongoing</div></div>
+              <div class="phase-body">
+                <strong style="font-size:12px;color:var(--navy)">Continuous Maturity</strong><br>
+                Quarterly rule reviews, red team exercises, compliance reporting, developer enablement
+              </div>
+            </div>
+          </div>
+          <div style="margin-top:1rem">
+            <ul class="bullets" style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem">
+              <li><strong>Never skip Phase 2</strong> — deploying in enforcement mode without a baseline generates false positive storms</li>
+              <li><strong>Developer training</strong> in Phase 3 reduces friction and prevents security-velocity conflict later</li>
+              <li>Phase 4 rollout should be <strong>namespace-by-namespace</strong>, not cluster-wide in one shot</li>
+              <li>Phase 5 cadence: monthly tuning sessions, quarterly red team, annual architecture review</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Slide 12: Risks & Mitigation -->
+    <div class="slide">
+      <div class="slide-inner">
+        <div class="slide-number">12 / 13</div>
+        <div class="slide-tag">Risks & Mitigation</div>
+        <div class="slide-headline">Four implementation risks are predictable and mitigable — the failures are almost always organizational, not technical</div>
+        <div class="slide-content">
+          <table class="risk-table">
+            <thead>
+              <tr>
+                <th>Risk</th><th>Severity</th><th>Root Cause</th><th>Mitigation</th><th>Owner</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Alert fatigue erodes analyst trust</td>
+                <td><span class="sev high">HIGH</span></td>
+                <td>Insufficient tuning before enforcement</td>
+                <td>Enforce Phase 2–3 baseline window; FPR KPI gating for rollout</td>
+                <td>SecOps Lead</td>
+              </tr>
+              <tr>
+                <td>Automated response breaks production</td>
+                <td><span class="sev high">HIGH</span></td>
+                <td>Over-automation before confidence calibration</td>
+                <td>Semi-auto for months 1–3; full auto only after runbook validation</td>
+                <td>SRE + SecOps</td>
+              </tr>
+              <tr>
+                <td>Performance degradation at scale</td>
+                <td><span class="sev med">MED</span></td>
+                <td>Agent overhead on high-traffic workloads</td>
+                <td>eBPF preferred over ptrace; load-test before production rollout</td>
+                <td>Platform Eng</td>
+              </tr>
+              <tr>
+                <td>Developer velocity friction</td>
+                <td><span class="sev med">MED</span></td>
+                <td>Policies blocking legitimate dev workflows</td>
+                <td>Separate policy profiles for staging/prod; dev feedback loop in Phase 3</td>
+                <td>DevOps + Sec</td>
+              </tr>
+              <tr>
+                <td>Compliance reporting gaps</td>
+                <td><span class="sev low">LOW</span></td>
+                <td>Telemetry not mapped to control frameworks</td>
+                <td>Map Falco/SIEM rules to CIS K8s Benchmarks and SOC2 controls</td>
+                <td>GRC Team</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="callout" style="margin-top:1rem">"The costliest runtime security failures we observe aren't from attackers exploiting gaps — they're from <em>organizations deploying enforcement before they've earned the right to enforce</em>."</div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Slide 13: Conclusion -->
+    <div class="slide">
+      <div class="slide-inner">
+        <div class="slide-number">13 / 13</div>
+        <div class="slide-tag">Conclusion</div>
+        <div class="slide-headline">Runtime security is not an optional layer — it is the only mechanism that reduces impact once prevention fails</div>
+        <div class="slide-content">
+          <div class="conclusion-grid">
+            <div class="conc-card">
+              <div class="cc-icon">◎</div>
+              <div class="cc-head">Complement Prevention</div>
+              <div class="cc-body">Runtime detection does not replace CI/CD controls — it closes the visibility gap that all preventive layers leave open after deployment</div>
+            </div>
+            <div class="conc-card">
+              <div class="cc-icon">⬡</div>
+              <div class="cc-head">Prioritize Signal Quality</div>
+              <div class="cc-body">High-confidence, low-volume detection drives analyst trust. Tune relentlessly. False positive rate is a strategic metric, not a technical afterthought</div>
+            </div>
+            <div class="conc-card">
+              <div class="cc-icon">△</div>
+              <div class="cc-head">Calibrate Response</div>
+              <div class="cc-body">Response automation must be earned through baseline maturity. Isolate before kill. Rotate credentials automatically. Review every automated action within 48 hours</div>
+            </div>
+          </div>
+          <div class="quote-box">
+            <div class="quote-text">"The goal is not perfect security — it is reducing impact through <strong>fast detection, calibrated response, and continuous learning</strong>. The organizations that win are not the ones with no incidents; they are the ones that contain incidents before they become breaches."</div>
+          </div>
+          <div class="metric-row" style="margin-top:1rem">
+            <div class="metric"><div class="val">197d</div><div class="lbl">Avg MTTD without runtime</div></div>
+            <div class="metric"><div class="val">&lt;15m</div><div class="lbl">Target MTTD with runtime</div></div>
+            <div class="metric"><div class="val">3.2×</div><div class="lbl">Faster incident closure</div></div>
+            <div class="metric"><div class="val">5 phases</div><div class="lbl">To full maturity</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+  </div>
+  
+  <!-- Navigation Controls -->
+  <div class="nav-controls">
+    <button class="nav-btn" id="prevBtn" onclick="prevSlide()">◀</button>
+    <button class="nav-btn" id="nextBtn" onclick="nextSlide()">▶</button>
+  </div>
+  
+  <div class="keyboard-hint">← → to navigate · ESC for overview</div>
+  
+  <script>
+    let currentSlide = 0;
+    const slides = document.querySelectorAll('.slide');
+    const totalSlides = slides.length;
+    const progressBar = document.getElementById('progressBar');
+    const slideCounter = document.getElementById('slideCounter');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    
+    function updateSlide() {
+      slides.forEach((slide, index) => {
+        slide.classList.remove('active');
+        if (index === currentSlide) {
+          slide.classList.add('active');
+        }
+      });
+      
+      // Update progress bar
+      const progress = ((currentSlide + 1) / totalSlides) * 100;
+      progressBar.style.width = progress + '%';
+      
+      // Update counter
+      slideCounter.textContent = `${currentSlide + 1} / ${totalSlides}`;
+      
+      // Update buttons
+      prevBtn.disabled = currentSlide === 0;
+      nextBtn.disabled = currentSlide === totalSlides - 1;
+    }
+    
+    function nextSlide() {
+      if (currentSlide < totalSlides - 1) {
+        currentSlide++;
+        updateSlide();
+      }
+    }
+    
+    function prevSlide() {
+      if (currentSlide > 0) {
+        currentSlide--;
+        updateSlide();
+      }
+    }
+    
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ') {
+        e.preventDefault();
+        nextSlide();
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        prevSlide();
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        currentSlide = 0;
+        updateSlide();
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        currentSlide = totalSlides - 1;
+        updateSlide();
+      }
+    });
+    
+    // Touch/swipe support
+    let touchStartX = 0;
+    let touchEndX = 0;
+    
+    document.addEventListener('touchstart', (e) => {
+      touchStartX = e.changedTouches[0].screenX;
+    });
+    
+    document.addEventListener('touchend', (e) => {
+      touchEndX = e.changedTouches[0].screenX;
+      handleSwipe();
+    });
+    
+    function handleSwipe() {
+      const swipeThreshold = 50;
+      const diff = touchStartX - touchEndX;
+      if (Math.abs(diff) > swipeThreshold) {
+        if (diff > 0) {
+          nextSlide();
+        } else {
+          prevSlide();
+        }
+      }
+    }
+    
+    // Initialize
+    updateSlide();
+  </script>
+</body>
+</html>
